@@ -205,10 +205,20 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const runAIPipeline = useCallback(async (stagger = false) => {
     setIsLoadingAI(true);
     setAiError(null);
+    setNudgeCards([]);
+    setTasteCircle((prev) => ({
+      ...prev,
+      tracks: [],
+    }));
 
     try {
+      const apiOptions = {
+        temperature: stagger ? 0.9 : undefined,
+        logResponse: stagger,
+      };
+
       // a. synthesizeTasteProfile
-      const rawProfile = await synthesizeTasteProfile(currentPlaylist.tracks);
+      const rawProfile = await synthesizeTasteProfile(currentPlaylist.tracks, apiOptions);
 
       const processedProfile: TasteProfile = {
         mood: rawProfile.mood,
@@ -225,7 +235,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       };
 
       // b. discoverSteppingStones
-      const suggestions = await discoverSteppingStones(processedProfile, currentPlaylist.tracks);
+      const suggestions = await discoverSteppingStones(processedProfile, currentPlaylist.tracks, apiOptions);
 
       // c. explanations and save rates (parallel for initial load, staggered for regenerate)
       let builtNudgeCards: NudgeCard[] = [];
@@ -247,7 +257,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             s.song_name,
             s.artist_name,
             sourceName,
-            sourceArtist
+            sourceArtist,
+            apiOptions
           );
 
           const savePercent = simulateSaveRate(s.closeness);
@@ -288,7 +299,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
               s.song_name,
               s.artist_name,
               sourceName,
-              sourceArtist
+              sourceArtist,
+              apiOptions
             );
 
             const savePercent = simulateSaveRate(s.closeness);
@@ -327,7 +339,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       const rawTracks = await buildTasteCircleTracks(
         processedProfile,
         currentPlaylist.tracks,
-        excludeSongs
+        excludeSongs,
+        apiOptions
       );
 
       // f. dedupe

@@ -19,7 +19,7 @@ function cleanJsonResponse(text) {
  * @param {object} options
  * @returns {Promise<any>} Parsed JSON object
  */
-export async function callGroq(systemPrompt, userPrompt, { temperature = 0.7 } = {}) {
+export async function callGroq(systemPrompt, userPrompt, { temperature = 0.7, logResponse = false } = {}) {
   const apiKey = import.meta.env.VITE_GROQ_API_KEY;
   if (!apiKey) {
     throw new Error("VITE_GROQ_API_KEY is not defined in environment variables");
@@ -43,10 +43,17 @@ export async function callGroq(systemPrompt, userPrompt, { temperature = 0.7 } =
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Unknown error");
+    if (logResponse) {
+      console.error("Raw Groq API error response:", errorText);
+    }
     throw new Error(`Groq API returned error status ${response.status}: ${errorText}`);
   }
 
   const data = await response.json();
+  if (logResponse) {
+    console.log("Raw Groq API response:", data);
+  }
+
   const content = data?.choices?.[0]?.message?.content;
   if (!content) {
     throw new Error("Groq API response did not contain message content");

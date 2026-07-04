@@ -6,13 +6,14 @@ import { callGroq } from "./groqClient";
  * @param {Array} tracks
  * @returns {Promise<object>} Parsed taste profile
  */
-export async function synthesizeTasteProfile(tracks) {
+export async function synthesizeTasteProfile(tracks, options = {}) {
+  const { temperature = 0.7, logResponse = false } = options;
   const systemPrompt = "You are a music taste analyst. Return ONLY valid JSON, no markdown, no extra text.";
   const userPrompt = `Given these tracks from a listener's playlist: ${JSON.stringify(
     tracks.map((t) => ({ name: t.name, artist: t.artist }))
   )}. Analyze this listener's taste profile and return JSON with this exact structure: { mood: string, energy: 'low'|'medium'|'high', vocal_style: string, era: string, circle_name: string (evocative 3-4 word name), circle_emoji: string, core_artists: array of 3 artist names from the list, taste_tags: array of exactly 3 short descriptive tags }`;
 
-  return callGroq(systemPrompt, userPrompt, { temperature: 0.7 });
+  return callGroq(systemPrompt, userPrompt, { temperature, logResponse });
 }
 
 /**
@@ -22,13 +23,14 @@ export async function synthesizeTasteProfile(tracks) {
  * @param {Array} tracks
  * @returns {Promise<Array>} List of suggestion objects
  */
-export async function discoverSteppingStones(tasteProfile, tracks) {
+export async function discoverSteppingStones(tasteProfile, tracks, options = {}) {
+  const { temperature = 0.7, logResponse = false } = options;
   const systemPrompt = "You are a music discovery specialist who finds real, well-known songs that expand a listener's taste without alienating them. Only recommend real songs and artists that actually exist. Return ONLY valid JSON.";
   const userPrompt = `A listener's taste profile: ${JSON.stringify(tasteProfile)}. Their playlist tracks: ${JSON.stringify(
     tracks.map((t) => ({ name: t.name, artist: t.artist }))
   )}. Suggest exactly 5 real songs (not in their playlist) that would work as stepping stones for discovery. For each, pick which existing playlist track it connects to most strongly (sourceTrack, must exactly match a name from the playlist tracks given). Mix of closeness levels: 2 'safe_step', 2 'stretch', 1 'leap'. Return JSON: { suggestions: [{ song_name, artist_name, closeness, sourceTrack }] } with exactly 5 entries.`;
 
-  const result = await callGroq(systemPrompt, userPrompt, { temperature: 0.7 });
+  const result = await callGroq(systemPrompt, userPrompt, { temperature, logResponse });
   return result?.suggestions || [];
 }
 
@@ -47,12 +49,14 @@ export async function generateExplanation(
   songName,
   artistName,
   sourceTrackName,
-  sourceTrackArtist
+  sourceTrackArtist,
+  options = {}
 ) {
+  const { temperature = 0.8, logResponse = false } = options;
   const systemPrompt = "You write short, warm, specific one-sentence explanations connecting a new song recommendation to a listener's existing favorite song. Return ONLY valid JSON.";
   const userPrompt = `Listener's taste profile: ${JSON.stringify(tasteProfile)}. They love '${sourceTrackName}' by ${sourceTrackArtist}. New recommendation: '${songName}' by ${artistName}. Write one sentence (max 20 words) explaining why they'll likely enjoy this, specifically referencing '${sourceTrackName}'. Be specific, not generic. Return JSON: { explanation: string }`;
 
-  const result = await callGroq(systemPrompt, userPrompt, { temperature: 0.8 });
+  const result = await callGroq(systemPrompt, userPrompt, { temperature, logResponse });
   return result?.explanation || "";
 }
 
@@ -88,13 +92,14 @@ export function simulateSaveRate(closeness = "") {
  * @param {Array} excludeSongs List of { song_name, artist_name } or similar to exclude
  * @returns {Promise<Array>} List of recommended songs
  */
-export async function buildTasteCircleTracks(tasteProfile, tracks, excludeSongs) {
+export async function buildTasteCircleTracks(tasteProfile, tracks, excludeSongs, options = {}) {
+  const { temperature = 0.75, logResponse = false } = options;
   const systemPrompt = "You recommend real songs that a taste-cluster of similar listeners would be discovering, distinct from the user's own stepping stones. Only recommend real, existing songs. Return ONLY valid JSON.";
   const userPrompt = `Taste profile: ${JSON.stringify(tasteProfile)}. Their playlist: ${JSON.stringify(
     tracks.map((t) => ({ name: t.name, artist: t.artist }))
   )}. Do NOT suggest any of these songs, they are already shown elsewhere: ${JSON.stringify(excludeSongs)}. Suggest exactly 8 different real songs that listeners with this same taste profile are discovering, each connected to one playlist track by theme or sound. Return JSON: { tracks: [{ song_name, artist_name, album_name, explanation (max 15 words), matchPercent (82-98 integer), sourceTrack }] } exactly 8 entries, matchPercent descending, none matching the excluded list.`;
 
-  const result = await callGroq(systemPrompt, userPrompt, { temperature: 0.75 });
+  const result = await callGroq(systemPrompt, userPrompt, { temperature, logResponse });
   return result?.tracks || [];
 }
 
