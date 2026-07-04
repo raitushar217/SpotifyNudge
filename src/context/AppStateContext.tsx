@@ -120,7 +120,7 @@ interface AppState {
    */
   playTrack: (track: SampleTrack) => void;
   playTasteCircleTrack: (track: CircleTrack, index: number) => void;
-  playDiscoveryBreakTrack: (track: any, index: number) => void;
+  playDiscoveryBreakTrack: (track: any, index: number, isDetour?: boolean) => void;
   playNext: () => void;
   playPrev: () => void;
   togglePlay: () => void;
@@ -161,6 +161,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   // ── Playlist / playback ──────────────────────────────────────────────────
   const [currentPlaylist, setCurrentPlaylist] = useState(samplePlaylist);
+  const currentPlaylistRef = useRef(currentPlaylist);
+  useEffect(() => {
+    currentPlaylistRef.current = currentPlaylist;
+  }, [currentPlaylist]);
   const [currentQueue, setCurrentQueue] = useState<SampleTrack[]>(queue);
 
   // Requirement 1: currentTrack = sampleQueue[0] on load
@@ -181,6 +185,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [discoveryBreakQueueIndex, setDiscoveryBreakQueueIndex] = useState(0);
   const [resumePlaylistIndex, setResumePlaylistIndex] = useState<number>(0);
   const [hasPlayedOrSavedSuggested, setHasPlayedOrSavedSuggested] = useState(false);
+  const [isDetourActive, setIsDetourActive] = useState(false);
 
   // ── Repeat data (simulated) ───────────────────────────────────────────────
   const [repeatData] = useState<RepeatData>({
@@ -221,7 +226,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       };
 
       // a. synthesizeTasteProfile
-      const rawProfile = await synthesizeTasteProfile(currentPlaylist.tracks, apiOptions);
+      const rawProfile = await synthesizeTasteProfile(currentPlaylistRef.current.tracks, apiOptions);
 
       const processedProfile: TasteProfile = {
         mood: rawProfile.mood,
@@ -238,7 +243,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       };
 
       // b. discoverSteppingStones
-      const suggestions = await discoverSteppingStones(processedProfile, currentPlaylist.tracks, apiOptions);
+      const suggestions = await discoverSteppingStones(processedProfile, currentPlaylistRef.current.tracks, apiOptions);
 
       // c. explanations and save rates (parallel for initial load, staggered for regenerate)
       let builtNudgeCards: NudgeCard[] = [];
@@ -249,7 +254,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           if (idx > 0) await sleep(300);
 
           // lookup source track details
-          const matchedSource = currentPlaylist.tracks.find(
+          const matchedSource = currentPlaylistRef.current.tracks.find(
             (t) => t.name.toLowerCase().trim() === s.sourceTrack.toLowerCase().trim()
           );
           const sourceName = matchedSource ? matchedSource.name : s.sourceTrack;
@@ -291,7 +296,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         builtNudgeCards = await Promise.all(
           suggestions.map(async (s: any, idx: number) => {
             // lookup source track details
-            const matchedSource = currentPlaylist.tracks.find(
+            const matchedSource = currentPlaylistRef.current.tracks.find(
               (t) => t.name.toLowerCase().trim() === s.sourceTrack.toLowerCase().trim()
             );
             const sourceName = matchedSource ? matchedSource.name : s.sourceTrack;
@@ -341,7 +346,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       // e. buildTasteCircleTracks
       const rawTracks = await buildTasteCircleTracks(
         processedProfile,
-        currentPlaylist.tracks,
+        currentPlaylistRef.current.tracks,
         excludeSongs,
         apiOptions
       );
@@ -439,7 +444,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoadingAI(false);
     }
-  }, [currentPlaylist]);
+  }, []);
 
   useEffect(() => {
     runAIPipeline();
@@ -524,11 +529,32 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (activeQueueContext === "discoverybreak") {
-      setActiveQueueContext("playlist");
-      const nextTrack = currentQueue[resumePlaylistIndex] || currentQueue[0];
-      setCurrentTrack(nextTrack);
-      setIsPlaying(true);
-      return;
+      if (isDetourActive) {
+        setActiveQueueContext("playlist");
+        const nextTrack = currentQueue[resumePlaylistIndex] || currentQueue[0];
+        setCurrentTrack(nextTrack);
+        setIsPlaying(true);
+        return;
+      } else {
+        const cards = nudgeCards;
+        const nextIdx = discoveryBreakQueueIndex + 1;
+        if (nextIdx >= cards.length) {
+          // Exhausted nudge cards -> return to playlist at index 0
+          setActiveQueueContext("playlist");
+          setCurrentTrack(currentQueue[0]);
+          setSongsPlayedCount(0);
+          setIsPlaying(true);
+          return;
+        }
+        const c = cards[nextIdx];
+        setDiscoveryBreakQueueIndex(nextIdx);
+        setCurrentTrack({
+          id: c.id, name: c.name || c.title, artist: c.artist,
+          album: c.album || "Single", dateAdded: "Discovery Break", duration: "3:30",
+        });
+        setIsPlaying(true);
+        return;
+      }
     }
 
     // activeQueueContext === "playlist"
@@ -563,6 +589,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     discoveryBreakQueueIndex,
     resumePlaylistIndex,
     hasPlayedOrSavedSuggested,
+    isDetourActive,
   ]);
 
   /**
@@ -583,11 +610,24 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (activeQueueContext === "discoverybreak") {
-      setActiveQueueContext("playlist");
-      const prevTrack = currentQueue[resumePlaylistIndex] || currentQueue[0];
-      setCurrentTrack(prevTrack);
-      setIsPlaying(true);
-      return;
+      if (isDetourActive) {
+        setActiveQueueContext("playlist");
+        const prevTrack = currentQueue[resumePlaylistIndex] || currentQueue[0];
+        setCurrentTrack(prevTrack);
+        setIsPlaying(true);
+        return;
+      } else {
+        if (discoveryBreakQueueIndex <= 0) return;
+        const prevIdx = discoveryBreakQueueIndex - 1;
+        const c = nudgeCards[prevIdx];
+        setDiscoveryBreakQueueIndex(prevIdx);
+        setCurrentTrack({
+          id: c.id, name: c.name || c.title, artist: c.artist,
+          album: c.album || "Single", dateAdded: "Discovery Break", duration: "3:30",
+        });
+        setIsPlaying(true);
+        return;
+      }
     }
 
     // playlist
@@ -605,6 +645,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     nudgeCards,
     discoveryBreakQueueIndex,
     resumePlaylistIndex,
+    isDetourActive,
   ]);
 
   /** Toggle isPlaying on/off */
@@ -642,8 +683,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   /**
    * Play a nudge card from Discovery Break — switches to discoverybreak context.
    */
-  const playDiscoveryBreakTrack = useCallback((card: any, index: number) => {
-    if (activeQueueContext === "playlist" && currentTrack) {
+  const playDiscoveryBreakTrack = useCallback((card: any, index: number, isDetour = false) => {
+    if (isDetour && activeQueueContext === "playlist" && currentTrack) {
       const idx = currentQueue.findIndex((t) => t.id === currentTrack.id);
       if (idx !== -1) {
         setResumePlaylistIndex(idx);
@@ -657,6 +698,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     });
     setIsPlaying(true);
     setHasPlayedOrSavedSuggested(true);
+    setIsDetourActive(isDetour);
   }, [activeQueueContext, currentTrack, currentQueue]);
 
   /**

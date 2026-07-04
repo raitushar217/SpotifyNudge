@@ -47,7 +47,7 @@ export default function DiscoveryBreakModal() {
   const dismiss = () => setShouldShowNudge(false);
 
   const handlePlay = () => {
-    playDiscoveryBreakTrack(nudgeTrack, activeCardIndex >= 0 ? activeCardIndex : 0);
+    playDiscoveryBreakTrack(nudgeTrack, activeCardIndex >= 0 ? activeCardIndex : 0, true);
     dismiss();
     showToast(`Playing ${nudgeTrack.name || nudgeTrack.title} — ${nudgeTrack.artist}`);
   };
