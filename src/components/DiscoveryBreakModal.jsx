@@ -15,6 +15,7 @@ export default function DiscoveryBreakModal() {
     setShouldShowNudge,
     playTrack,
     addToSavedForLater,
+    appendToPlaylist,
     savedForLater,
     showToast,
     isLoadingAI,
@@ -60,12 +61,29 @@ export default function DiscoveryBreakModal() {
   };
 
   const handleSave = () => {
-    addToSavedForLater(nudgeTrackForPlayback);
+    // Format today's date as "Mon D, YYYY"
+    const today = new Date();
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const formattedDate = `${months[today.getMonth()]} ${today.getDate()}, ${today.getFullYear()}`;
+
+    const trackForPlaylist = {
+      id: "saved-" + Date.now(),
+      name: nudgeTrack.name || nudgeTrack.title,
+      artist: nudgeTrack.artist,
+      album: "Discovered via Taste Circles",
+      dateAdded: formattedDate,
+      duration: "—",
+    };
+
+    addToSavedForLater(trackForPlaylist);
+    appendToPlaylist(trackForPlaylist);
     showToast(`Saved to Library`);
   };
 
+  const trackName = (nudgeTrack.name || nudgeTrack.title || "").toLowerCase();
+  const trackArtist = (nudgeTrack.artist || "").toLowerCase();
   const isSaved = savedForLater.some(
-    (x) => x.id === nudgeTrackForPlayback.id || x.name === nudgeTrackForPlayback.name
+    (x) => (x.name || "").toLowerCase() === trackName && (x.artist || "").toLowerCase() === trackArtist
   );
 
   const color = artistColor(nudgeTrack.artist);

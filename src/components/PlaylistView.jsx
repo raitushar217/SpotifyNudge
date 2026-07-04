@@ -151,7 +151,16 @@ export default function PlaylistView() {
                       size={14}
                       className="text-[#A7A7A7] opacity-0 group-hover:opacity-100 hover:text-white transition-all"
                     />
-                    <span className="text-[#A7A7A7] text-sm">{track.duration}</span>
+                    {track.duration === "—" ? (
+                      <span
+                        className="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                        style={{ background: "rgba(29,185,84,0.15)", color: "#1DB954" }}
+                      >
+                        ✓ Saved
+                      </span>
+                    ) : (
+                      <span className="text-[#A7A7A7] text-sm">{track.duration}</span>
+                    )}
                     <MoreHorizontal
                       size={14}
                       className="text-[#A7A7A7] opacity-0 group-hover:opacity-100 transition-opacity"

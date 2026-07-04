@@ -146,6 +146,7 @@ interface AppState {
   setShouldShowNudge: (v: boolean) => void;
   addToSavedForLater: (t: SampleTrack) => void;
   removeFromSavedForLater: (id: string) => void;
+  appendToPlaylist: (t: SampleTrack) => void;
   setIsLoadingAI: (v: boolean) => void;
   setAiError: (v: string | null) => void;
 
@@ -168,8 +169,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const lastIndex = queue.length - 1;
 
   // ── Playlist / playback ──────────────────────────────────────────────────
-  const [currentPlaylist] = useState(samplePlaylist);
-  const [currentQueue] = useState<SampleTrack[]>(queue);
+  const [currentPlaylist, setCurrentPlaylist] = useState(samplePlaylist);
+  const [currentQueue, setCurrentQueue] = useState<SampleTrack[]>(queue);
 
   // Requirement 1: currentTrack = sampleQueue[0] on load
   const [currentTrack, setCurrentTrack] = useState<SampleTrack>(queue[0]);
@@ -455,6 +456,24 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const removeFromSavedForLater = (id: string) =>
     setSavedForLater((prev) => prev.filter((t) => t.id !== id));
 
+  /** Append a discovered track to the playlist + queue (deduped by name+artist) */
+  const appendToPlaylist = useCallback((t: SampleTrack) => {
+    setCurrentPlaylist((prev) => {
+      const isDupe = prev.tracks.some(
+        (x) => x.name.toLowerCase() === t.name.toLowerCase() && x.artist.toLowerCase() === t.artist.toLowerCase()
+      );
+      if (isDupe) return prev;
+      return { ...prev, tracks: [...prev.tracks, t] };
+    });
+    setCurrentQueue((prev) => {
+      const isDupe = prev.some(
+        (x) => x.name.toLowerCase() === t.name.toLowerCase() && x.artist.toLowerCase() === t.artist.toLowerCase()
+      );
+      if (isDupe) return prev;
+      return [...prev, t];
+    });
+  }, []);
+
   // ── Internal helper: evaluate triggers after count increments ─────────────
   const applyTriggers = useCallback((newCount: number, trackIdx: number) => {
     // Requirement 3: every 4 songs → shouldShowNudge = true
@@ -589,6 +608,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setShouldShowNudge,
     addToSavedForLater,
     removeFromSavedForLater,
+    appendToPlaylist,
     setIsLoadingAI,
     setAiError,
     // Phase 4 AI setters
