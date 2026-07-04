@@ -71,12 +71,19 @@ export interface RepeatData {
 
 // ─── Context shape ─────────────────────────────────────────────────────────────
 
+type QueueContext = "playlist" | "tastecircles" | "discoverybreak";
+
 interface AppState {
   // Playlist / queue
   currentPlaylist: typeof samplePlaylist;
   currentQueue: SampleTrack[];
   currentTrack: SampleTrack;       // starts at queue[0]; never null after init
   isPlaying: boolean;
+
+  // Active queue context
+  activeQueueContext: QueueContext;
+  tastecircleQueueIndex: number;
+  discoveryBreakQueueIndex: number;
 
   // Song-count tracking
   songsPlayedCount: number;
@@ -90,7 +97,6 @@ interface AppState {
   repeatData: RepeatData;
 
   // ── AI-generated fields ────────────────────────────────────────────────────
-  // TEMP PLACEHOLDER — replaced by real AI in Phase 4
   tasteProfile: TasteProfile;
   nudgeCards: NudgeCard[];
   tasteCircle: TasteCircle;
@@ -113,28 +119,12 @@ interface AppState {
    * and evaluates nudge / end-of-playlist triggers.
    */
   playTrack: (track: SampleTrack) => void;
-
-  /**
-   * Advance to the next track in sampleQueue.
-   * - If on the last track → sets shouldShowEndOfPlaylist=true instead.
-   * - Increments songsPlayedCount.
-   * - After every 4 plays (count % 4 === 0 && count > 0) → shouldShowNudge=true.
-   */
+  playTasteCircleTrack: (track: CircleTrack, index: number) => void;
+  playDiscoveryBreakTrack: (track: any, index: number) => void;
   playNext: () => void;
-
-  /**
-   * Go back to the previous track in sampleQueue.
-   * Does nothing if already at index 0.
-   */
   playPrev: () => void;
-
-  /** Toggle isPlaying on/off */
   togglePlay: () => void;
-
-  /** Play artist fallback track when chip in RepeatBehaviorBanner is clicked */
   playArtistFallback: (artist: string) => void;
-
-  /** Trigger a toast message that auto-dismisses after 2 seconds */
   showToast: (message: string) => void;
 
   // ── Low-level setters (used by child components) ───────────────────────────
@@ -144,6 +134,7 @@ interface AppState {
   setShouldShowRepeatBanner: (v: boolean) => void;
   setSongsPlayedCount: (v: number) => void;
   setShouldShowNudge: (v: boolean) => void;
+  setActiveQueueContext: (v: QueueContext) => void;
   addToSavedForLater: (t: SampleTrack) => void;
   removeFromSavedForLater: (id: string) => void;
   appendToPlaylist: (t: SampleTrack) => void;
@@ -183,6 +174,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   // Requirement 5: shouldShowRepeatBanner starts true; X button sets false
   const [shouldShowRepeatBanner, setShouldShowRepeatBanner] = useState(true);
+
+  // ── Queue context state ─────────────────────────────────────────────────
+  const [activeQueueContext, setActiveQueueContext] = useState<QueueContext>("playlist");
+  const [tastecircleQueueIndex, setTastecircleQueueIndex] = useState(0);
+  const [discoveryBreakQueueIndex, setDiscoveryBreakQueueIndex] = useState(0);
 
   // ── Repeat data (simulated) ───────────────────────────────────────────────
   const [repeatData] = useState<RepeatData>({
@@ -475,9 +471,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── Internal helper: evaluate triggers after count increments ─────────────
-  const applyTriggers = useCallback((newCount: number, trackIdx: number) => {
-    // Requirement 3: every 4 songs → shouldShowNudge = true
-    if (newCount > 0 && newCount % 4 === 0) {
+  const applyTriggers = useCallback((newCount: number, trackIdx: number, queueCtx: QueueContext) => {
+    // Nudge ONLY fires in playlist context
+    if (queueCtx === "playlist" && newCount > 0 && newCount % 4 === 0) {
       setShouldShowNudge(true);
     }
   }, []);
@@ -485,57 +481,146 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   // ── Playback actions ──────────────────────────────────────────────────────
 
   /**
-   * Requirement 2 & 4: advance to next track.
-   * If on the last track → end-of-playlist instead of advancing.
+   * Context-aware Next: advances within whichever queue is active.
    */
   const playNext = useCallback(() => {
-    const currentIdx = queue.findIndex((t) => t.id === currentTrack.id);
-
-    // Requirement 4: last track → modal, no advance
-    if (currentIdx === lastIndex) {
-      setShouldShowEndOfPlaylist(true);
+    if (activeQueueContext === "tastecircles") {
+      const tracks = tasteCircle.tracks;
+      const nextIdx = tastecircleQueueIndex + 1;
+      if (nextIdx >= tracks.length) {
+        // Exhausted taste circle queue → return to playlist from start
+        setActiveQueueContext("playlist");
+        setCurrentTrack(currentQueue[0]);
+        setSongsPlayedCount(0);
+        setIsPlaying(true);
+        return;
+      }
+      const t = tracks[nextIdx];
+      setTastecircleQueueIndex(nextIdx);
+      setCurrentTrack({
+        id: t.id, name: t.title, artist: t.artist,
+        album: t.album, dateAdded: "Taste Circle", duration: "3:30",
+      });
+      setIsPlaying(true);
       return;
     }
 
-    const nextTrack = queue[currentIdx + 1];
-    const newCount = songsPlayedCount + 1;
+    if (activeQueueContext === "discoverybreak") {
+      const cards = nudgeCards;
+      const nextIdx = discoveryBreakQueueIndex + 1;
+      if (nextIdx >= cards.length) {
+        // Exhausted discovery break queue → return to playlist from start
+        setActiveQueueContext("playlist");
+        setCurrentTrack(currentQueue[0]);
+        setSongsPlayedCount(0);
+        setIsPlaying(true);
+        return;
+      }
+      const c = cards[nextIdx];
+      setDiscoveryBreakQueueIndex(nextIdx);
+      setCurrentTrack({
+        id: c.id, name: c.name || c.title, artist: c.artist,
+        album: c.album || "Single", dateAdded: "Discovery Break", duration: "3:30",
+      });
+      setIsPlaying(true);
+      return;
+    }
 
+    // activeQueueContext === "playlist"
+    const currentIdx = currentQueue.findIndex((t) => t.id === currentTrack.id);
+    if (currentIdx === currentQueue.length - 1) {
+      setShouldShowEndOfPlaylist(true);
+      return;
+    }
+    const nextTrack = currentQueue[currentIdx + 1];
+    const newCount = songsPlayedCount + 1;
     setCurrentTrack(nextTrack);
     setIsPlaying(true);
     setSongsPlayedCount(newCount);
-    applyTriggers(newCount, currentIdx + 1);
-  }, [currentTrack, queue, lastIndex, songsPlayedCount, applyTriggers]);
+    applyTriggers(newCount, currentIdx + 1, "playlist");
+  }, [activeQueueContext, currentTrack, currentQueue, songsPlayedCount, applyTriggers, tasteCircle, tastecircleQueueIndex, nudgeCards, discoveryBreakQueueIndex]);
 
   /**
-   * Go back to the previous track. No-op at index 0.
+   * Context-aware Prev: goes back within whichever queue is active.
    */
   const playPrev = useCallback(() => {
-    const currentIdx = queue.findIndex((t) => t.id === currentTrack.id);
-    if (currentIdx <= 0) return;
-    setCurrentTrack(queue[currentIdx - 1]);
-    setIsPlaying(true);
-  }, [currentTrack, queue]);
+    if (activeQueueContext === "tastecircles") {
+      if (tastecircleQueueIndex <= 0) return;
+      const prevIdx = tastecircleQueueIndex - 1;
+      const t = tasteCircle.tracks[prevIdx];
+      setTastecircleQueueIndex(prevIdx);
+      setCurrentTrack({
+        id: t.id, name: t.title, artist: t.artist,
+        album: t.album, dateAdded: "Taste Circle", duration: "3:30",
+      });
+      setIsPlaying(true);
+      return;
+    }
 
-  /**
-   * Requirement 6: toggle isPlaying, swap icon.
-   */
+    if (activeQueueContext === "discoverybreak") {
+      if (discoveryBreakQueueIndex <= 0) return;
+      const prevIdx = discoveryBreakQueueIndex - 1;
+      const c = nudgeCards[prevIdx];
+      setDiscoveryBreakQueueIndex(prevIdx);
+      setCurrentTrack({
+        id: c.id, name: c.name || c.title, artist: c.artist,
+        album: c.album || "Single", dateAdded: "Discovery Break", duration: "3:30",
+      });
+      setIsPlaying(true);
+      return;
+    }
+
+    // playlist
+    const currentIdx = currentQueue.findIndex((t) => t.id === currentTrack.id);
+    if (currentIdx <= 0) return;
+    setCurrentTrack(currentQueue[currentIdx - 1]);
+    setIsPlaying(true);
+  }, [activeQueueContext, currentTrack, currentQueue, tasteCircle, tastecircleQueueIndex, nudgeCards, discoveryBreakQueueIndex]);
+
+  /** Toggle isPlaying on/off */
   const togglePlay = useCallback(() => {
     setIsPlaying((prev) => !prev);
   }, []);
 
   /**
-   * Play a specific track (e.g. clicking a row in PlaylistView).
-   * Increments songsPlayedCount and evaluates triggers.
+   * Play a specific track from the playlist queue.
+   * Switches to playlist context, increments count, evaluates triggers.
    */
   const playTrack = useCallback((track: SampleTrack) => {
-    const trackIdx = queue.findIndex((t) => t.id === track.id);
+    setActiveQueueContext("playlist");
+    const trackIdx = currentQueue.findIndex((t) => t.id === track.id);
     const newCount = songsPlayedCount + 1;
-
     setCurrentTrack(track);
     setIsPlaying(true);
     setSongsPlayedCount(newCount);
-    applyTriggers(newCount, trackIdx);
-  }, [queue, songsPlayedCount, applyTriggers]);
+    applyTriggers(newCount, trackIdx, "playlist");
+  }, [currentQueue, songsPlayedCount, applyTriggers]);
+
+  /**
+   * Play a track from Taste Circles — switches to tastecircles context.
+   */
+  const playTasteCircleTrack = useCallback((circleTrack: CircleTrack, index: number) => {
+    setActiveQueueContext("tastecircles");
+    setTastecircleQueueIndex(index);
+    setCurrentTrack({
+      id: circleTrack.id, name: circleTrack.title, artist: circleTrack.artist,
+      album: circleTrack.album, dateAdded: "Taste Circle", duration: "3:30",
+    });
+    setIsPlaying(true);
+  }, []);
+
+  /**
+   * Play a nudge card from Discovery Break — switches to discoverybreak context.
+   */
+  const playDiscoveryBreakTrack = useCallback((card: any, index: number) => {
+    setActiveQueueContext("discoverybreak");
+    setDiscoveryBreakQueueIndex(index);
+    setCurrentTrack({
+      id: card.id, name: card.name || card.title, artist: card.artist,
+      album: card.album || "Single", dateAdded: "Discovery Break", duration: "3:30",
+    });
+    setIsPlaying(true);
+  }, []);
 
   /**
    * Play artist fallback track when chip in RepeatBehaviorBanner is clicked
@@ -579,6 +664,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     currentQueue,
     currentTrack,
     isPlaying,
+    activeQueueContext,
+    tastecircleQueueIndex,
+    discoveryBreakQueueIndex,
     songsPlayedCount,
     shouldShowNudge,
     shouldShowEndOfPlaylist,
@@ -594,6 +682,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     toastMessage,
     // Playback actions
     playTrack,
+    playTasteCircleTrack,
+    playDiscoveryBreakTrack,
     playNext,
     playPrev,
     togglePlay,
@@ -606,6 +696,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setShouldShowRepeatBanner,
     setSongsPlayedCount,
     setShouldShowNudge,
+    setActiveQueueContext,
     addToSavedForLater,
     removeFromSavedForLater,
     appendToPlaylist,

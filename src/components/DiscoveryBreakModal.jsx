@@ -13,7 +13,7 @@ export default function DiscoveryBreakModal() {
   const {
     shouldShowNudge,
     setShouldShowNudge,
-    playTrack,
+    playDiscoveryBreakTrack,
     addToSavedForLater,
     appendToPlaylist,
     savedForLater,
@@ -27,9 +27,10 @@ export default function DiscoveryBreakModal() {
 
   // Selected card based on cycle index
   const cardIndex = Math.max(0, Math.floor(songsPlayedCount / 4 - 1));
-  const activeCard = nudgeCards && nudgeCards.length > 0
-    ? nudgeCards[cardIndex % nudgeCards.length]
-    : null;
+  const activeCardIndex = nudgeCards && nudgeCards.length > 0
+    ? cardIndex % nudgeCards.length
+    : -1;
+  const activeCard = activeCardIndex >= 0 ? nudgeCards[activeCardIndex] : null;
 
   const nudgeTrack = activeCard || {
     id: "nudge-fallback-d",
@@ -43,21 +44,12 @@ export default function DiscoveryBreakModal() {
     saveRatePercent: 78,
   };
 
-  const nudgeTrackForPlayback = {
-    id: nudgeTrack.id,
-    name: nudgeTrack.name || nudgeTrack.title,
-    artist: nudgeTrack.artist,
-    album: nudgeTrack.album || "Single",
-    dateAdded: "Discovery Break",
-    duration: "3:30",
-  };
-
   const dismiss = () => setShouldShowNudge(false);
 
   const handlePlay = () => {
-    playTrack(nudgeTrackForPlayback);
+    playDiscoveryBreakTrack(nudgeTrack, activeCardIndex >= 0 ? activeCardIndex : 0);
     dismiss();
-    showToast(`Playing ${nudgeTrackForPlayback.name} — ${nudgeTrackForPlayback.artist}`);
+    showToast(`Playing ${nudgeTrack.name || nudgeTrack.title} — ${nudgeTrack.artist}`);
   };
 
   const handleSave = () => {

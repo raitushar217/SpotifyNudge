@@ -11,19 +11,11 @@ function strColor(str = "") {
 }
 
 export default function TasteCirclesView() {
-  const { tasteCircle, tasteCircleTracks, currentTrack, setCurrentTrack, setIsPlaying, isLoadingAI } = useAppState();
+  const { tasteCircle, tasteCircleTracks, currentTrack, playTasteCircleTrack, isLoadingAI } = useAppState();
   const activeTrackId = currentTrack?.id ?? null;
 
-  const handleSelectTrack = (circleTrack) => {
-    setCurrentTrack({
-      id: circleTrack.id,
-      name: circleTrack.title,
-      artist: circleTrack.artist,
-      album: circleTrack.album,
-      dateAdded: "Jul 2, 2026",
-      duration: "3:30",
-    });
-    setIsPlaying(true);
+  const handleSelectTrack = (circleTrack, index) => {
+    playTasteCircleTrack(circleTrack, index);
   };
 
   return (
@@ -48,7 +40,7 @@ export default function TasteCirclesView() {
         <button
           id="taste-circles-play-btn"
           className="w-14 h-14 rounded-full bg-[#1DB954] flex items-center justify-center hover:bg-[#1ed760] hover:scale-105 active:scale-95 transition-all shadow-lg"
-          onClick={() => tasteCircleTracks[0] && handleSelectTrack(tasteCircleTracks[0])}
+          onClick={() => tasteCircleTracks[0] && handleSelectTrack(tasteCircleTracks[0], 0)}
         >
           <Play size={24} fill="black" className="text-black ml-1" />
         </button>
@@ -84,7 +76,7 @@ export default function TasteCirclesView() {
             <button
               key={track.id}
               id={`taste-circles-track-${track.id}`}
-              onClick={() => handleSelectTrack(track)}
+              onClick={() => handleSelectTrack(track, i)}
               className="w-full group rounded-md hover:bg-[#282828] transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] text-left"
             >
               <div className="grid items-center py-2.5 px-2 rounded-md" style={{ gridTemplateColumns: "32px 1fr 1fr 80px" }}>
