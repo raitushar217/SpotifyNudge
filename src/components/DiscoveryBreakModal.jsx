@@ -70,6 +70,7 @@ export default function DiscoveryBreakModal() {
     addToSavedForLater(trackForPlaylist);
     appendToPlaylist(trackForPlaylist);
     showToast(`Saved to Library`);
+    dismiss();
   };
 
   const trackName = (nudgeTrack.name || nudgeTrack.title || "").toLowerCase();

@@ -179,6 +179,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [activeQueueContext, setActiveQueueContext] = useState<QueueContext>("playlist");
   const [tastecircleQueueIndex, setTastecircleQueueIndex] = useState(0);
   const [discoveryBreakQueueIndex, setDiscoveryBreakQueueIndex] = useState(0);
+  const [resumePlaylistIndex, setResumePlaylistIndex] = useState<number>(0);
+  const [hasPlayedOrSavedSuggested, setHasPlayedOrSavedSuggested] = useState(false);
 
   // ── Repeat data (simulated) ───────────────────────────────────────────────
   const [repeatData] = useState<RepeatData>({
@@ -205,6 +207,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const runAIPipeline = useCallback(async (stagger = false) => {
     setIsLoadingAI(true);
     setAiError(null);
+    setHasPlayedOrSavedSuggested(false);
     setNudgeCards([]);
     setTasteCircle((prev) => ({
       ...prev,
@@ -459,8 +462,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }, 2000);
   }, []);
 
-  const addToSavedForLater = (t: SampleTrack) =>
+  const addToSavedForLater = useCallback((t: SampleTrack) => {
     setSavedForLater((prev) => (prev.some((x) => x.id === t.id) ? prev : [...prev, t]));
+    setHasPlayedOrSavedSuggested(true);
+  }, []);
 
   const removeFromSavedForLater = (id: string) =>
     setSavedForLater((prev) => prev.filter((t) => t.id !== id));
@@ -519,22 +524,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (activeQueueContext === "discoverybreak") {
-      const cards = nudgeCards;
-      const nextIdx = discoveryBreakQueueIndex + 1;
-      if (nextIdx >= cards.length) {
-        // Exhausted discovery break queue → return to playlist from start
-        setActiveQueueContext("playlist");
-        setCurrentTrack(currentQueue[0]);
-        setSongsPlayedCount(0);
-        setIsPlaying(true);
-        return;
-      }
-      const c = cards[nextIdx];
-      setDiscoveryBreakQueueIndex(nextIdx);
-      setCurrentTrack({
-        id: c.id, name: c.name || c.title, artist: c.artist,
-        album: c.album || "Single", dateAdded: "Discovery Break", duration: "3:30",
-      });
+      setActiveQueueContext("playlist");
+      const nextTrack = currentQueue[resumePlaylistIndex] || currentQueue[0];
+      setCurrentTrack(nextTrack);
       setIsPlaying(true);
       return;
     }
@@ -542,7 +534,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     // activeQueueContext === "playlist"
     const currentIdx = currentQueue.findIndex((t) => t.id === currentTrack.id);
     if (currentIdx === currentQueue.length - 1) {
-      setShouldShowEndOfPlaylist(true);
+      if (!hasPlayedOrSavedSuggested) {
+        // Restart the playlist and play the first song!
+        setCurrentTrack(currentQueue[0]);
+        setSongsPlayedCount(0);
+        setIsPlaying(true);
+        setShouldShowEndOfPlaylist(false);
+      } else {
+        setShouldShowEndOfPlaylist(true);
+      }
       return;
     }
     const nextTrack = currentQueue[currentIdx + 1];
@@ -551,7 +551,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setIsPlaying(true);
     setSongsPlayedCount(newCount);
     applyTriggers(newCount, currentIdx + 1, "playlist");
-  }, [activeQueueContext, currentTrack, currentQueue, songsPlayedCount, applyTriggers, tasteCircle, tastecircleQueueIndex, nudgeCards, discoveryBreakQueueIndex]);
+  }, [
+    activeQueueContext,
+    currentTrack,
+    currentQueue,
+    songsPlayedCount,
+    applyTriggers,
+    tasteCircle,
+    tastecircleQueueIndex,
+    nudgeCards,
+    discoveryBreakQueueIndex,
+    resumePlaylistIndex,
+    hasPlayedOrSavedSuggested,
+  ]);
 
   /**
    * Context-aware Prev: goes back within whichever queue is active.
@@ -571,14 +583,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (activeQueueContext === "discoverybreak") {
-      if (discoveryBreakQueueIndex <= 0) return;
-      const prevIdx = discoveryBreakQueueIndex - 1;
-      const c = nudgeCards[prevIdx];
-      setDiscoveryBreakQueueIndex(prevIdx);
-      setCurrentTrack({
-        id: c.id, name: c.name || c.title, artist: c.artist,
-        album: c.album || "Single", dateAdded: "Discovery Break", duration: "3:30",
-      });
+      setActiveQueueContext("playlist");
+      const prevTrack = currentQueue[resumePlaylistIndex] || currentQueue[0];
+      setCurrentTrack(prevTrack);
       setIsPlaying(true);
       return;
     }
@@ -586,9 +593,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     // playlist
     const currentIdx = currentQueue.findIndex((t) => t.id === currentTrack.id);
     if (currentIdx <= 0) return;
-    setCurrentTrack(currentQueue[currentIdx - 1]);
+    const prevTrack = currentQueue[currentIdx - 1];
+    setCurrentTrack(prevTrack);
     setIsPlaying(true);
-  }, [activeQueueContext, currentTrack, currentQueue, tasteCircle, tastecircleQueueIndex, nudgeCards, discoveryBreakQueueIndex]);
+  }, [
+    activeQueueContext,
+    currentTrack,
+    currentQueue,
+    tasteCircle,
+    tastecircleQueueIndex,
+    nudgeCards,
+    discoveryBreakQueueIndex,
+    resumePlaylistIndex,
+  ]);
 
   /** Toggle isPlaying on/off */
   const togglePlay = useCallback(() => {
@@ -626,6 +643,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
    * Play a nudge card from Discovery Break — switches to discoverybreak context.
    */
   const playDiscoveryBreakTrack = useCallback((card: any, index: number) => {
+    if (activeQueueContext === "playlist" && currentTrack) {
+      const idx = currentQueue.findIndex((t) => t.id === currentTrack.id);
+      if (idx !== -1) {
+        setResumePlaylistIndex(idx);
+      }
+    }
     setActiveQueueContext("discoverybreak");
     setDiscoveryBreakQueueIndex(index);
     setCurrentTrack({
@@ -633,7 +656,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       album: card.album || "Single", dateAdded: "Discovery Break", duration: "3:30",
     });
     setIsPlaying(true);
-  }, []);
+    setHasPlayedOrSavedSuggested(true);
+  }, [activeQueueContext, currentTrack, currentQueue]);
 
   /**
    * Play artist fallback track when chip in RepeatBehaviorBanner is clicked
