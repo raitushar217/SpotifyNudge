@@ -205,7 +205,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [isLoadingAI, setIsLoadingAI] = useState(true);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  const runAIPipeline = useCallback(async () => {
+  const runAIPipeline = useCallback(async (stagger = false) => {
     setIsLoadingAI(true);
     setAiError(null);
 
@@ -230,9 +230,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       // b. discoverSteppingStones
       const suggestions = await discoverSteppingStones(processedProfile, currentPlaylist.tracks);
 
-      // c. parallel explanations and save rates
-      const builtNudgeCards: NudgeCard[] = await Promise.all(
-        suggestions.map(async (s: any, idx: number) => {
+      // c. explanations and save rates (parallel for initial load, staggered for regenerate)
+      let builtNudgeCards: NudgeCard[] = [];
+      if (stagger) {
+        const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+        for (let idx = 0; idx < suggestions.length; idx++) {
+          const s = suggestions[idx];
+          if (idx > 0) await sleep(300);
+
           // lookup source track details
           const matchedSource = currentPlaylist.tracks.find(
             (t) => t.name.toLowerCase().trim() === s.sourceTrack.toLowerCase().trim()
@@ -257,7 +262,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
               ? "Stretch"
               : "Leap";
 
-          return {
+          builtNudgeCards.push({
             id: `nudge-${idx}-${Date.now()}`,
             name: s.song_name,
             title: s.song_name,
@@ -269,9 +274,51 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             saveRatePercent: savePercent,
             saveRate: savePercent,
             sourceTrack: sourceName,
-          };
-        })
-      );
+          });
+        }
+      } else {
+        builtNudgeCards = await Promise.all(
+          suggestions.map(async (s: any, idx: number) => {
+            // lookup source track details
+            const matchedSource = currentPlaylist.tracks.find(
+              (t) => t.name.toLowerCase().trim() === s.sourceTrack.toLowerCase().trim()
+            );
+            const sourceName = matchedSource ? matchedSource.name : s.sourceTrack;
+            const sourceArtist = matchedSource ? matchedSource.artist : "Unknown";
+
+            const explanation = await generateExplanation(
+              processedProfile,
+              s.song_name,
+              s.artist_name,
+              sourceName,
+              sourceArtist
+            );
+
+            const savePercent = simulateSaveRate(s.closeness);
+
+            const mappedIntensity =
+              s.closeness === "safe_step"
+                ? "Safe Step"
+                : s.closeness === "stretch"
+                ? "Stretch"
+                : "Leap";
+
+            return {
+              id: `nudge-${idx}-${Date.now()}`,
+              name: s.song_name,
+              title: s.song_name,
+              artist: s.artist_name,
+              album: "Single",
+              explanation,
+              closeness: s.closeness,
+              intensity: mappedIntensity,
+              saveRatePercent: savePercent,
+              saveRate: savePercent,
+              sourceTrack: sourceName,
+            };
+          })
+        );
+      }
 
       // d. build excludeSongs list
       const excludeSongs = builtNudgeCards.map((n) => ({
@@ -548,7 +595,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setTasteProfile,
     setNudgeCards,
     setTasteCircle,
-    regenerateAI: runAIPipeline,
+    regenerateAI: () => runAIPipeline(true),
   };
 
   return (
