@@ -48,18 +48,35 @@ export default function BottomPlayerBar() {
   // Track position in queue (context-aware)
   let isFirst = false;
   let isLast = false;
+  let queueIdx = -1;
+  let queueLength = 0;
+
+  console.log("BottomPlayerBar render:", {
+    activeQueueContext,
+    tastecircleQueueIndex,
+    discoveryBreakQueueIndex,
+    tasteCircleTracks,
+    nudgeCards,
+    currentQueue,
+  });
 
   if (activeQueueContext === "tastecircles") {
     isFirst = tastecircleQueueIndex <= 0;
-    isLast = tastecircleQueueIndex === tasteCircleTracks.length - 1;
+    isLast = tastecircleQueueIndex === (tasteCircleTracks || []).length - 1;
+    queueIdx = tastecircleQueueIndex;
+    queueLength = (tasteCircleTracks || []).length;
   } else if (activeQueueContext === "discoverybreak") {
     isFirst = discoveryBreakQueueIndex <= 0;
-    isLast = discoveryBreakQueueIndex === nudgeCards.length - 1;
+    isLast = discoveryBreakQueueIndex === (nudgeCards || []).length - 1;
+    queueIdx = discoveryBreakQueueIndex;
+    queueLength = (nudgeCards || []).length;
   } else {
     // playlist
-    const queueIdx = currentQueue.findIndex((t) => t.id === song?.id);
-    isFirst = queueIdx <= 0;
-    isLast = queueIdx === currentQueue.length - 1;
+    const foundIdx = (currentQueue || []).findIndex((t) => t.id === song?.id);
+    isFirst = foundIdx <= 0;
+    isLast = foundIdx === (currentQueue || []).length - 1;
+    queueIdx = foundIdx;
+    queueLength = (currentQueue || []).length;
   }
 
   const handleNextClick = () => {
@@ -195,7 +212,7 @@ export default function BottomPlayerBar() {
         {/* Queue position pill */}
         {queueIdx >= 0 && (
           <span className="text-[#535353] text-xs tabular-nums select-none">
-            {queueIdx + 1} / {currentQueue.length}
+            {queueIdx + 1} / {queueLength}
           </span>
         )}
 
