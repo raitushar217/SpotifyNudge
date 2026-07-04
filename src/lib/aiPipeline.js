@@ -28,7 +28,9 @@ export async function discoverSteppingStones(tasteProfile, tracks, options = {})
   const systemPrompt = "You are a music discovery specialist who finds real, well-known songs that expand a listener's taste without alienating them. Only recommend real songs and artists that actually exist. Return ONLY valid JSON.";
   const userPrompt = `A listener's taste profile: ${JSON.stringify(tasteProfile)}. Their playlist tracks: ${JSON.stringify(
     tracks.map((t) => ({ name: t.name, artist: t.artist }))
-  )}. Suggest exactly 5 real songs (not in their playlist) that would work as stepping stones for discovery. For each, pick which existing playlist track it connects to most strongly (sourceTrack, must exactly match a name from the playlist tracks given). Mix of closeness levels: 2 'safe_step', 2 'stretch', 1 'leap'. Return JSON: { suggestions: [{ song_name, artist_name, closeness, sourceTrack }] } with exactly 5 entries.`;
+  )}. Suggest exactly 5 real songs (not in their playlist) that would work as stepping stones for discovery. For each, pick which existing playlist track it connects to most strongly (sourceTrack, must exactly match a name from the playlist tracks given). Mix of closeness levels: 2 'safe_step', 2 'stretch', 1 'leap'.
+  For each recommendation, write a warm, specific one-sentence explanation (max 20 words) explaining why they'll likely enjoy it, referencing the sourceTrack.
+  Return JSON: { suggestions: [{ song_name, artist_name, closeness, sourceTrack, explanation }] } with exactly 5 entries.`;
 
   const result = await callGroq(systemPrompt, userPrompt, { temperature, logResponse });
   return result?.suggestions || [];
@@ -52,6 +54,9 @@ export async function generateExplanation(
   sourceTrackArtist,
   options = {}
 ) {
+  if (options.pregenerated) {
+    return options.pregenerated;
+  }
   const { temperature = 0.8, logResponse = false } = options;
   const systemPrompt = "You write short, warm, specific one-sentence explanations connecting a new song recommendation to a listener's existing favorite song. Return ONLY valid JSON.";
   const userPrompt = `Listener's taste profile: ${JSON.stringify(tasteProfile)}. They love '${sourceTrackName}' by ${sourceTrackArtist}. New recommendation: '${songName}' by ${artistName}. Write one sentence (max 20 words) explaining why they'll likely enjoy this, specifically referencing '${sourceTrackName}'. Be specific, not generic. Return JSON: { explanation: string }`;

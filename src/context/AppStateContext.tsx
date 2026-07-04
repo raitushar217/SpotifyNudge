@@ -258,7 +258,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             s.artist_name,
             sourceName,
             sourceArtist,
-            apiOptions
+            { ...apiOptions, pregenerated: s.explanation }
           );
 
           const savePercent = simulateSaveRate(s.closeness);
@@ -300,7 +300,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
               s.artist_name,
               sourceName,
               sourceArtist,
-              apiOptions
+              { ...apiOptions, pregenerated: s.explanation }
             );
 
             const savePercent = simulateSaveRate(s.closeness);
