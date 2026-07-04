@@ -22,6 +22,11 @@ export default function BottomPlayerBar() {
     playPrev,
     currentQueue,
     songsPlayedCount,
+    activeQueueContext,
+    tastecircleQueueIndex,
+    discoveryBreakQueueIndex,
+    tasteCircleTracks,
+    nudgeCards,
   } = useAppState();
 
   // ── Progress bar (visual only — no real audio) ────────────────────────────
@@ -40,10 +45,32 @@ export default function BottomPlayerBar() {
   const color = artistColor(song?.artist ?? "");
   const total = song?.duration ?? "4:32";
 
-  // Track position in queue (1-based display)
-  const queueIdx = currentQueue.findIndex((t) => t.id === song?.id);
-  const isFirst = queueIdx <= 0;
-  const isLast  = queueIdx === currentQueue.length - 1;
+  // Track position in queue (context-aware)
+  let isFirst = false;
+  let isLast = false;
+
+  if (activeQueueContext === "tastecircles") {
+    isFirst = tastecircleQueueIndex <= 0;
+    isLast = tastecircleQueueIndex === tasteCircleTracks.length - 1;
+  } else if (activeQueueContext === "discoverybreak") {
+    isFirst = discoveryBreakQueueIndex <= 0;
+    isLast = discoveryBreakQueueIndex === nudgeCards.length - 1;
+  } else {
+    // playlist
+    const queueIdx = currentQueue.findIndex((t) => t.id === song?.id);
+    isFirst = queueIdx <= 0;
+    isLast = queueIdx === currentQueue.length - 1;
+  }
+
+  const handleNextClick = () => {
+    console.log("Current activeQueueContext:", activeQueueContext);
+    playNext();
+  };
+
+  const handlePrevClick = () => {
+    console.log("Current activeQueueContext for Prev:", activeQueueContext);
+    playPrev();
+  };
 
   return (
     <div
@@ -93,7 +120,7 @@ export default function BottomPlayerBar() {
           {/* Previous */}
           <button
             id="bottom-player-prev-btn"
-            onClick={playPrev}
+            onClick={handlePrevClick}
             disabled={isFirst}
             className="transition-colors disabled:opacity-30"
             style={{ color: isFirst ? "#535353" : "#A7A7A7" }}
@@ -120,7 +147,7 @@ export default function BottomPlayerBar() {
           {/* Next — Requirement 2 & 4 */}
           <button
             id="bottom-player-next-btn"
-            onClick={playNext}
+            onClick={handleNextClick}
             className="text-[#A7A7A7] hover:text-white transition-colors"
             style={{ color: isLast ? "#A7A7A7" : undefined }}
             aria-label="Next track"

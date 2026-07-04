@@ -20,6 +20,7 @@ export default function BreakYourLoopScreen() {
     currentPlaylist,
     setCurrentTrack,
     setIsPlaying,
+    playDiscoveryBreakTrack,
     addToSavedForLater,
     savedForLater,
     showToast,
@@ -33,18 +34,12 @@ export default function BreakYourLoopScreen() {
     const nowPlaying = playingId === id ? null : id;
     setPlayingId(nowPlaying);
     if (nowPlaying !== null) {
-      const card = nudgeCards.find((c) => c.id === id);
-      if (card) {
-        setCurrentTrack({
-          id: card.id,
-          name: card.title,
-          artist: card.artist,
-          album: card.album,
-          dateAdded: "",
-          duration: "",
-        });
-        setIsPlaying(true);
+      const idx = nudgeCards.findIndex((c) => c.id === id);
+      if (idx !== -1) {
+        playDiscoveryBreakTrack(nudgeCards[idx], idx);
       }
+    } else {
+      setIsPlaying(false);
     }
   };
 
