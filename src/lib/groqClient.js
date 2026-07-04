@@ -3,10 +3,30 @@
  */
 function cleanJsonResponse(text) {
   let cleaned = text.trim();
-  // Strip starting ```json or ```
-  cleaned = cleaned.replace(/^```(?:json)?\s*/i, "");
-  // Strip ending ```
-  cleaned = cleaned.replace(/\s*```$/, "");
+  
+  const firstCurly = cleaned.indexOf('{');
+  const lastCurly = cleaned.lastIndexOf('}');
+  const firstSquare = cleaned.indexOf('[');
+  const lastSquare = cleaned.lastIndexOf(']');
+  
+  let startIdx = -1;
+  let endIdx = -1;
+  
+  if (firstCurly !== -1 && (firstSquare === -1 || firstCurly < firstSquare)) {
+    startIdx = firstCurly;
+    endIdx = lastCurly;
+  } else if (firstSquare !== -1) {
+    startIdx = firstSquare;
+    endIdx = lastSquare;
+  }
+  
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    cleaned = cleaned.substring(startIdx, endIdx + 1);
+  } else {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, "");
+    cleaned = cleaned.replace(/\s*```$/, "");
+  }
+  
   return cleaned.trim();
 }
 
@@ -38,6 +58,7 @@ export async function callGroq(systemPrompt, userPrompt, { temperature = 0.7, lo
         { role: "user", content: userPrompt },
       ],
       temperature,
+      response_format: { type: "json_object" },
     }),
   });
 
